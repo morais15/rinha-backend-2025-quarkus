@@ -4,79 +4,67 @@ import io.vertx.core.Future;
 import io.vertx.redis.client.Command;
 import io.vertx.redis.client.Redis;
 import io.vertx.redis.client.Request;
+import io.vertx.redis.client.Response;
 import jakarta.enterprise.context.ApplicationScoped;
 import lombok.RequiredArgsConstructor;
 import rinha.dto.SummaryResponse;
 import rinha.dto.TotalSummaryResponse;
+import rinha.worker.RedisWorker;
 
 import java.math.BigDecimal;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 @ApplicationScoped
 @RequiredArgsConstructor
 public class SaveService {
 
+    private final RedisWorker redisWorker;
     private final Redis redis;
 
-    private static final String DEFAULT_TYPE = "default";
-    private static final String FALLBACK_TYPE = "fallback";
-
     private final AtomicReference<BigDecimal> firstAmount = new AtomicReference<>();
-    private final AtomicInteger reqs = new AtomicInteger();
 
     public void saveDefault(BigDecimal amount) {
-        save(DEFAULT_TYPE, amount);
-        reqs.incrementAndGet();
+        setFirstAmount(amount);
+        redisWorker.incrementLocalDefaultCount();
     }
 
     public void saveFallback(BigDecimal amount) {
-        save(FALLBACK_TYPE, amount);
+        setFirstAmount(amount);
+        redisWorker.incrementLocalFallbackCount();
     }
 
-    private void save(String type, BigDecimal amount) {
+    private void setFirstAmount(BigDecimal amount) {
         firstAmount.compareAndSet(null, amount);
-
-        var req = Request.cmd(Command.INCR).arg("payments:" + type + ":count");
-        redis.send(req).onComplete(ignore -> {
-        });
-    }
-
-    private Future<SummaryResponse> defaultSummary() {
-        return summary(DEFAULT_TYPE);
-    }
-
-    private Future<SummaryResponse> fallbackSummary() {
-        return summary(FALLBACK_TYPE);
-    }
-
-    private Future<SummaryResponse> summary(String type) {
-        var reqCount = Request.cmd(Command.GET).arg("payments:" + type + ":count");
-
-        return redis.send(reqCount)
-                .map(countResp -> {
-                    int count = (countResp == null || countResp.toString() == null)
-                            ? 0
-                            : Integer.parseInt(countResp.toString());
-
-                    BigDecimal sum = firstAmount.get() != null
-                            ? firstAmount.get().multiply(BigDecimal.valueOf(count))
-                            : BigDecimal.ZERO;
-
-                    return new SummaryResponse(count, sum);
-                });
     }
 
     public Future<TotalSummaryResponse> totalSummary() {
-        Future<SummaryResponse> defaultFuture = defaultSummary();
-        Future<SummaryResponse> fallbackFuture = fallbackSummary();
+        var req = Request.cmd(Command.MGET)
+                .arg("payments:default:count")
+                .arg("payments:fallback:count");
 
-//        System.out.println("reqs: " + reqs.get());
+        return redis.send(req)
+                .map(responses -> {
+                    // responses é uma Response que representa uma lista com os dois resultados
+                    Response defaultCountResp = responses.get(0);
+                    Response fallbackCountResp = responses.get(1);
 
-        return Future.all(defaultFuture, fallbackFuture)
-                .map(cf -> {
-                    SummaryResponse defaultResp = defaultFuture.result();
-                    SummaryResponse fallbackResp = fallbackFuture.result();
+                    int defaultCount = defaultCountResp == null || defaultCountResp.toString() == null
+                            ? 0 : Integer.parseInt(defaultCountResp.toString());
+
+                    int fallbackCount = fallbackCountResp == null || fallbackCountResp.toString() == null
+                            ? 0 : Integer.parseInt(fallbackCountResp.toString());
+
+                    BigDecimal defaultSum = firstAmount.get() != null
+                            ? firstAmount.get().multiply(BigDecimal.valueOf(defaultCount))
+                            : BigDecimal.ZERO;
+
+                    BigDecimal fallbackSum = firstAmount.get() != null
+                            ? firstAmount.get().multiply(BigDecimal.valueOf(fallbackCount))
+                            : BigDecimal.ZERO;
+
+                    SummaryResponse defaultResp = new SummaryResponse(defaultCount, defaultSum);
+                    SummaryResponse fallbackResp = new SummaryResponse(fallbackCount, fallbackSum);
+
                     return new TotalSummaryResponse(defaultResp, fallbackResp);
                 });
     }

@@ -10,7 +10,7 @@ import rinha.dto.PaymentsRequest;
 import rinha.dto.PaymentsRestClientRequest;
 import rinha.dto.TotalSummaryResponse;
 import rinha.service.SaveService;
-import rinha.service.WorkerService;
+import rinha.worker.PaymentWorker;
 
 import java.time.Instant;
 
@@ -18,8 +18,10 @@ import java.time.Instant;
 @RequiredArgsConstructor
 public class PaymentsResource {
 
-    private final WorkerService workerService;
+    private final PaymentWorker paymentWorker;
     private final SaveService saveService;
+
+    private static final Response acceptedResponse = Response.accepted().build();
 
     @POST
     @Path("/payments")
@@ -28,9 +30,9 @@ public class PaymentsResource {
 
         var saveRequest = new PaymentsRestClientRequest(request.correlationId, request.amount, Instant.now());
 
-        workerService.saveInQueue(saveRequest);
+        paymentWorker.saveInQueue(saveRequest);
 
-        return Response.accepted().build();
+        return acceptedResponse;
     }
 
 //    @POST

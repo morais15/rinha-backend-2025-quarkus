@@ -25,7 +25,7 @@ public class RedisWorker {
 
     @PostConstruct
     void start() {
-        scheduler.scheduleWithFixedDelay(this::flushCountsToRedis, 0, 50, TimeUnit.MILLISECONDS);
+        scheduler.scheduleWithFixedDelay(this::flushCountsToRedis, 0, 10, TimeUnit.MILLISECONDS);
     }
 
 //    public void sendToRedis() {
@@ -57,12 +57,12 @@ public class RedisWorker {
     public void flushCountsToRedis() {
         long toSendDefault = localDefaultCount.getAndSet(0);
         if (toSendDefault > 0) {
-            redis.send(Request.cmd(Command.INCRBY).arg("payments:default:count").arg(Long.toString(toSendDefault)));
+            redis.send(Request.cmd(Command.INCRBY).arg("payments:default:count").arg(Long.toString(toSendDefault))).toCompletionStage().toCompletableFuture().join();
         }
 
         long toSendFallback = localFallbackCount.getAndSet(0);
         if (toSendFallback > 0) {
-            redis.send(Request.cmd(Command.INCRBY).arg("payments:fallback:count").arg(Long.toString(toSendFallback)));
+            redis.send(Request.cmd(Command.INCRBY).arg("payments:fallback:count").arg(Long.toString(toSendFallback))).toCompletionStage().toCompletableFuture().join();
         }
     }
 }

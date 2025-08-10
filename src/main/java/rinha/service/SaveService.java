@@ -44,7 +44,6 @@ public class SaveService {
 
         return redis.send(req)
                 .map(responses -> {
-                    // responses é uma Response que representa uma lista com os dois resultados
                     Response defaultCountResp = responses.get(0);
                     Response fallbackCountResp = responses.get(1);
 

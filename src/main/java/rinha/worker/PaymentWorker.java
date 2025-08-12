@@ -36,7 +36,7 @@ public class PaymentWorker {
 
     @PostConstruct
     void startSchedule() {
-        scheduler.scheduleWithFixedDelay(this::runSchedule, 0, 100, TimeUnit.MILLISECONDS);
+        scheduler.scheduleWithFixedDelay(this::runSchedule, 0, 200, TimeUnit.MILLISECONDS);
     }
 
     public void saveInQueue(PaymentsRestClientRequest request) {

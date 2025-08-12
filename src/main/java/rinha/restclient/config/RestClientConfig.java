@@ -1,7 +1,6 @@
 package rinha.restclient.config;
 
 import io.quarkus.rest.client.reactive.QuarkusRestClientBuilder;
-import io.quarkus.runtime.Startup;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.inject.Produces;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
@@ -15,7 +14,6 @@ public class RestClientConfig {
 
     @Produces
     @ApplicationScoped
-    @Startup
     public Payments1RestClient createPayments1RestClient(
             @ConfigProperty(name = "payments1.url") String url
     ) {
@@ -28,7 +26,6 @@ public class RestClientConfig {
 
     @Produces
     @ApplicationScoped
-    @Startup
     public Payments2RestClient createPayments2RestClient(
             @ConfigProperty(name = "payments2.url") String url
     ) {
@@ -41,7 +38,6 @@ public class RestClientConfig {
 
     @Produces
     @ApplicationScoped
-    @Startup
     public SummaryRestClient createSummaryRestClient(
             @ConfigProperty(name = "other.api") String url
     ) {

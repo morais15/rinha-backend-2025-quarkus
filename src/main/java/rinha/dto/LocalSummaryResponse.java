@@ -3,11 +3,9 @@ package rinha.dto;
 import lombok.AllArgsConstructor;
 import lombok.NoArgsConstructor;
 
-import java.math.BigDecimal;
-
 @AllArgsConstructor
 @NoArgsConstructor
-public class SummaryResponse {
-    public Long totalRequests;
-    public BigDecimal totalAmount;
+public class LocalSummaryResponse {
+    public Long defaultReqs;
+    public Long fallbackReqs;
 }

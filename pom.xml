@@ -57,10 +57,6 @@
             <artifactId>jackson-module-afterburner</artifactId>
             <version>2.19.2</version>
         </dependency>
-        <dependency>
-            <groupId>io.quarkus</groupId>
-            <artifactId>quarkus-redis-client</artifactId>
-        </dependency>
     </dependencies>
 
     <build>

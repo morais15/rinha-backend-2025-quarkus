@@ -42,10 +42,8 @@ public class PaymentWorker {
     public void sendPayment(PaymentsRestClientRequest request) {
         payments1RestClient.payments(request)
                 .onItem().invoke(() -> databaseService.saveDefault(request))
-                .onFailure().recoverWithUni(() -> {
-                    saveInQueue(request);
-                    return Uni.createFrom().voidItem();
-                })
+                .onFailure().invoke(() -> saveInQueue(request))
+                .onFailure().recoverWithUni(() -> Uni.createFrom().voidItem())
                 .subscribe().with(ignored -> {
                 });
     }

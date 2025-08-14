@@ -23,16 +23,10 @@ public class DatabaseService {
 
     private final AtomicReference<BigDecimal> firstAmount = new AtomicReference<>();
     private final ConcurrentLinkedQueue<Instant> defaultReqs = new ConcurrentLinkedQueue<>();
-    private final ConcurrentLinkedQueue<Instant> fallbackReqs = new ConcurrentLinkedQueue<>();
 
     public void saveDefault(PaymentsRestClientRequest request) {
         setFirstAmount(request.amount);
         defaultReqs.add(request.requestedAt);
-    }
-
-    public void saveFallback(PaymentsRestClientRequest request) {
-        setFirstAmount(request.amount);
-        fallbackReqs.add(request.requestedAt);
     }
 
     private void setFirstAmount(BigDecimal amount) {
@@ -41,7 +35,7 @@ public class DatabaseService {
 
     public LocalSummaryResponse localSummary(Instant from, Instant to) {
         if (from == null || to == null) {
-            return new LocalSummaryResponse((long) defaultReqs.size(), (long) fallbackReqs.size());
+            return new LocalSummaryResponse((long) defaultReqs.size(), 0L);
         }
 
         long defaultCount = 0;
@@ -51,14 +45,7 @@ public class DatabaseService {
             }
         }
 
-        long fallbackCount = 0;
-        for (Instant i : fallbackReqs) {
-            if (!i.isBefore(from) && !i.isAfter(to)) {
-                fallbackCount++;
-            }
-        }
-
-        return new LocalSummaryResponse(defaultCount, fallbackCount);
+        return new LocalSummaryResponse(defaultCount, 0L);
     }
 
     public TotalSummaryResponse totalSummary(Instant from, Instant to) {
@@ -71,10 +58,9 @@ public class DatabaseService {
         }
 
         var totalDefaultReqs = otherApiSummary.defaultReqs + localSummary.defaultReqs;
-        var totalFallbackReqs = otherApiSummary.fallbackReqs + localSummary.fallbackReqs;
 
         var defaultSummary = new SummaryResponse(totalDefaultReqs, amount.multiply(BigDecimal.valueOf(totalDefaultReqs)));
-        var fallbackSummary = new SummaryResponse(totalFallbackReqs, amount.multiply(BigDecimal.valueOf(totalFallbackReqs)));
+        var fallbackSummary = new SummaryResponse(0L, BigDecimal.ZERO);
 
         return new TotalSummaryResponse(defaultSummary, fallbackSummary);
     }

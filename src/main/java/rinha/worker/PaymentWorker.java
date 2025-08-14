@@ -7,7 +7,6 @@ import jakarta.annotation.PostConstruct;
 import jakarta.enterprise.context.ApplicationScoped;
 import rinha.dto.PaymentsRestClientRequest;
 import rinha.restclient.Payments1RestClient;
-import rinha.restclient.Payments2RestClient;
 import rinha.service.DatabaseService;
 
 import java.util.concurrent.*;
@@ -17,7 +16,6 @@ import java.util.concurrent.*;
 public class PaymentWorker {
 
     private final Payments1RestClient payments1RestClient;
-    private final Payments2RestClient payments2RestClient;
     private final DatabaseService databaseService;
     private final ExecutorService executorService;
 
@@ -25,11 +23,9 @@ public class PaymentWorker {
     private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
 
     public PaymentWorker(Payments1RestClient payments1RestClient,
-                         Payments2RestClient payments2RestClient,
                          DatabaseService databaseService,
                          @VirtualThreads ExecutorService executorService) {
         this.payments1RestClient = payments1RestClient;
-        this.payments2RestClient = payments2RestClient;
         this.databaseService = databaseService;
         this.executorService = executorService;
     }
@@ -46,12 +42,10 @@ public class PaymentWorker {
     public void sendPayment(PaymentsRestClientRequest request) {
         payments1RestClient.payments(request)
                 .onItem().invoke(() -> databaseService.saveDefault(request))
-                .onFailure().recoverWithUni(() ->
-                        payments2RestClient.payments(request)
-                                .onItem().invoke(() -> databaseService.saveFallback(request))
-                                .onFailure().invoke(() -> saveInQueue(request))
-                                .onFailure().recoverWithUni(() -> Uni.createFrom().voidItem())
-                )
+                .onFailure().recoverWithUni(() -> {
+                    saveInQueue(request);
+                    return Uni.createFrom().voidItem();
+                })
                 .subscribe().with(ignored -> {
                 });
     }

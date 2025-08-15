@@ -9,6 +9,7 @@ import rinha.dto.PaymentsRestClientRequest;
 import rinha.restclient.Payments1RestClient;
 import rinha.service.DatabaseService;
 
+import java.time.Duration;
 import java.util.concurrent.*;
 
 @ApplicationScoped
@@ -43,6 +44,7 @@ public class PaymentWorker {
     public void sendPayment(PaymentsRestClientRequest request) {
         payments1RestClient.payments(request)
                 .onItem().invoke(() -> databaseService.saveDefault(request))
+                .onFailure().retry().withBackOff(Duration.ofMillis(50)).atMost(2)
                 .onFailure().invoke(() -> errorQueue.add(request))
                 .onFailure().recoverWithUni(() -> Uni.createFrom().voidItem())
                 .subscribe().with(ignored -> {

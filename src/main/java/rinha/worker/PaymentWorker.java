@@ -22,6 +22,7 @@ public class PaymentWorker {
     private final ExecutorService executorService;
 
     private final ConcurrentLinkedQueue<PaymentsRestClientRequest> queue = new ConcurrentLinkedQueue<>();
+    private final ConcurrentLinkedQueue<PaymentsRestClientRequest> errorQueue = new ConcurrentLinkedQueue<>();
     private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
 
     public PaymentWorker(Payments1RestClient payments1RestClient,
@@ -49,7 +50,7 @@ public class PaymentWorker {
                 .onFailure().recoverWithUni(() ->
                         payments2RestClient.payments(request)
                                 .onItem().invoke(() -> databaseService.saveFallback(request))
-                                .onFailure().invoke(() -> saveInQueue(request))
+                                .onFailure().invoke(() -> errorQueue.add(request))
                                 .onFailure().recoverWithUni(() -> Uni.createFrom().voidItem())
                 )
                 .subscribe().with(ignored -> {
@@ -57,11 +58,14 @@ public class PaymentWorker {
     }
 
     public void runSchedule() {
-//        System.out.println("size: " + queue.size());
+        processQueues(queue);
+        processQueues(errorQueue);
+    }
 
+    public void processQueues(ConcurrentLinkedQueue<PaymentsRestClientRequest> queueToProcess) {
         PaymentsRestClientRequest payment;
-        while ((payment = queue.poll()) != null) {
-            PaymentsRestClientRequest p = payment;
+        while ((payment = queueToProcess.poll()) != null) {
+            final PaymentsRestClientRequest p = payment;
             executorService.submit(() -> sendPayment(p));
         }
     }

@@ -2,7 +2,6 @@ package rinha.worker;
 
 import io.quarkus.runtime.Startup;
 import io.quarkus.virtual.threads.VirtualThreads;
-import io.smallrye.mutiny.Uni;
 import jakarta.annotation.PostConstruct;
 import jakarta.enterprise.context.ApplicationScoped;
 import rinha.dto.PaymentsRestClientRequest;
@@ -21,8 +20,8 @@ public class PaymentWorker {
     private final ExecutorService executorService;
 
     private final ConcurrentLinkedQueue<PaymentsRestClientRequest> queue = new ConcurrentLinkedQueue<>();
-    private final ConcurrentLinkedQueue<PaymentsRestClientRequest> errorQueue = new ConcurrentLinkedQueue<>();
     private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
+    private final Semaphore semaphore = new Semaphore(100);
 
     public PaymentWorker(Payments1RestClient payments1RestClient,
                          DatabaseService databaseService,
@@ -34,7 +33,7 @@ public class PaymentWorker {
 
     @PostConstruct
     void startSchedule() {
-        scheduler.scheduleWithFixedDelay(this::runSchedule, 0, 100, TimeUnit.MILLISECONDS);
+        scheduler.scheduleWithFixedDelay(this::runSchedule, 0, 50, TimeUnit.MILLISECONDS);
     }
 
     public void saveInQueue(PaymentsRestClientRequest request) {
@@ -42,18 +41,22 @@ public class PaymentWorker {
     }
 
     public void sendPayment(PaymentsRestClientRequest request) {
-        payments1RestClient.payments(request)
-                .onItem().invoke(() -> databaseService.saveDefault(request))
-                .onFailure().retry().withBackOff(Duration.ofMillis(50)).atMost(2)
-                .onFailure().invoke(() -> errorQueue.add(request))
-                .onFailure().recoverWithUni(() -> Uni.createFrom().voidItem())
-                .subscribe().with(ignored -> {
-                });
+        try {
+            semaphore.acquire();
+
+            payments1RestClient.payments(request)
+                    .onItem().invoke(() -> databaseService.saveDefault(request))
+                    .onFailure().retry().withBackOff(Duration.ofMillis(50), Duration.ofMillis(200)).indefinitely()
+                    .onTermination().invoke(semaphore::release)
+                    .subscribe().with(ignored -> {
+                    });
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
     }
 
     public void runSchedule() {
         processQueues(queue);
-        processQueues(errorQueue);
     }
 
     public void processQueues(ConcurrentLinkedQueue<PaymentsRestClientRequest> queueToProcess) {

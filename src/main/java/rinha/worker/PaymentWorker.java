@@ -21,7 +21,7 @@ public class PaymentWorker {
 
     private final ConcurrentLinkedQueue<PaymentsRestClientRequest> queue = new ConcurrentLinkedQueue<>();
     private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
-    private final Semaphore semaphore = new Semaphore(50);
+    private final Semaphore semaphore = new Semaphore(100);
 
     public PaymentWorker(Payments1RestClient payments1RestClient,
                          DatabaseService databaseService,
@@ -46,7 +46,7 @@ public class PaymentWorker {
 
             payments1RestClient.payments(request)
                     .onItem().invoke(() -> databaseService.saveDefault(request))
-                    .onFailure().retry().withBackOff(Duration.ofMillis(50), Duration.ofMillis(200)).indefinitely()
+                    .onFailure().retry().withBackOff(Duration.ofMillis(50), Duration.ofMillis(100)).indefinitely()
                     .onTermination().invoke(semaphore::release)
                     .subscribe().with(ignored -> {
                     });

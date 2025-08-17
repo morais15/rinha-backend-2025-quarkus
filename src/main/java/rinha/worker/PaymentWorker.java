@@ -10,6 +10,7 @@ import rinha.restclient.Payments1RestClient;
 import rinha.restclient.Payments2RestClient;
 import rinha.service.DatabaseService;
 
+import java.time.Duration;
 import java.util.concurrent.*;
 
 @ApplicationScoped
@@ -24,6 +25,7 @@ public class PaymentWorker {
     private final ConcurrentLinkedQueue<PaymentsRestClientRequest> queue = new ConcurrentLinkedQueue<>();
     private final ConcurrentLinkedQueue<PaymentsRestClientRequest> errorQueue = new ConcurrentLinkedQueue<>();
     private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
+    private final Semaphore semaphore = new Semaphore(100);
 
     public PaymentWorker(Payments1RestClient payments1RestClient,
                          Payments2RestClient payments2RestClient,
@@ -45,16 +47,24 @@ public class PaymentWorker {
     }
 
     public void sendPayment(PaymentsRestClientRequest request) {
-        payments1RestClient.payments(request)
-                .onItem().invoke(() -> databaseService.saveDefault(request))
-                .onFailure().recoverWithUni(() ->
-                        payments2RestClient.payments(request)
-                                .onItem().invoke(() -> databaseService.saveFallback(request))
-                                .onFailure().invoke(() -> errorQueue.add(request))
-                                .onFailure().recoverWithUni(() -> Uni.createFrom().voidItem())
-                )
-                .subscribe().with(ignored -> {
-                });
+        try {
+            semaphore.acquire();
+
+            payments1RestClient.payments(request)
+                    .onItem().invoke(() -> databaseService.saveDefault(request))
+                    .onFailure().retry().withBackOff(Duration.ofMillis(50), Duration.ofMillis(100)).atMost(2)
+                    .onFailure().recoverWithUni(() ->
+                            payments2RestClient.payments(request)
+                                    .onItem().invoke(() -> databaseService.saveFallback(request))
+                                    .onFailure().invoke(() -> errorQueue.add(request))
+                                    .onFailure().recoverWithUni(() -> Uni.createFrom().voidItem())
+                    )
+                    .onTermination().invoke(semaphore::release)
+                    .subscribe().with(ignored -> {
+                    });
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
     }
 
     public void runSchedule() {

@@ -21,7 +21,7 @@ public class PaymentWorker {
 
     private final ConcurrentLinkedQueue<PaymentsRestClientRequest> queue = new ConcurrentLinkedQueue<>();
     private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
-    private final Semaphore semaphore = new Semaphore(100);
+    private final Semaphore semaphore = new Semaphore(50);
 
     public PaymentWorker(Payments1RestClient payments1RestClient,
                          DatabaseService databaseService,
